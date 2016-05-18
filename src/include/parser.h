@@ -238,8 +238,72 @@ class parser
     
     void to_term_at()
     { /* bes_split */
-        ROS_ERROR_STREAM("TODO: " << __func__ << "(" << __LINE__ << ")");
+        static const boost::regex bes_regex("((.*?)(\\+{3}AT.*?):(\\d+):)(.*)");
+        boost::smatch bes_matches;
+        if (boost::regex_match(more_, bes_matches, bes_regex))
+        {
+            size_t len = boost::lexical_cast<size_t>(bes_matches[4].str().data());
+            if (len + 2 <= bes_matches[5].length())
+            {
+                boost::regex body_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
+                boost::smatch body_matches;
+                std::string input = bes_matches[5].str();
+                if (boost::regex_match(input, body_matches, body_regex))
+                {
+                    std::string raw = bes_matches[2];
+                    recv_std_extract(raw);
+                    std::string body = body_matches[1] + "\r\n";
+                    std::string req = bes_matches[3].str().substr(5);
+                    if ((waitsync_ == WAITSYNC_NO) ||
+                        req.empty() ||
+                        (req == request_))
+                    {
+                        more_ = body;
+                        to_term_net();
+                        if (!more_.empty()) {
+                            ROS_ERROR_STREAM("BES parse error: " << more_);
+                        }
+                    }
+                    else
+                    {
+                        ROS_ERROR_STREAM("BES unexpected sync message: " << body);
+                    }
+                    more_ = body_matches[2];
+                }
+                else
+                {
+                    std::string raw = bes_matches[1];
+                    recv_std_extract(raw);
+                    more_.erase(0, raw.length());
+                }
+            }
+            else
+            {
+                ROS_WARN_STREAM("need more data: " << more_.data());
+            }
+        }
+        else
+        {
+            static const boost::regex maybe_bes_regex("(.*?[^+]*)(\\+{3}(AT.*?:\\d*|AT[^:]{0,10}:?|AT?|A?)|\\+{0,2})$");
+            boost::smatch maybe_bes_matches;
+            if (boost::regex_match(more_, maybe_bes_matches, maybe_bes_regex))
+            {
+                if (!maybe_bes_matches[1].str().empty()) {
+                    std::string raw = maybe_bes_matches[1];
+                    recv_std_extract(raw);
+                    more_.erase(0, raw.length());
+                }
+                if (!maybe_bes_matches[2].str().empty()) {
+                    ROS_WARN_STREAM("need more data: " << more_.data());
+                }
+            }
+            else
+            {
+                ROS_ERROR_STREAM("unexpected error parsing: " << more_);
+            }
+        }
     }
+    
     void to_term_net()
     { /* answer_split */
         static const boost::regex eol_regex("\r\n");
@@ -267,7 +331,7 @@ class parser
             else
             {
                 static const boost::regex async_regex(
-                    "^(RECVSTART|RECVEND,|RECVFAILED,|SEND[^,]*,|BITRATE,|SRCLEVEL,|PHYON|PHYOFF|USBL[^,]*,"
+                    "^(RECVSTART|RECVEND,|RECVFAILED,|SEND[^,]*,|BITRATE,|RADDR,|SRCLEVEL,|PHYON|PHYOFF|USBL[^,]*,"
                     "|DELIVERED|FAILED|EXPIRED|CANCELED)(.*?)\r\n(.*)");
                 boost::smatch async_matches;
                 /* 1 - asyn keyword, 2 - async parameters, 3 - rest */
@@ -355,6 +419,8 @@ class parser
             usblphyp(parameters);
         } else if (async == "BITRATE,") {
             bitrate(parameters);
+        } else if (async == "RADDR,") {
+            raddr(parameters);
         } else if (async == "DELIVERED") {
             delivered(parameters);
         } else if (async == "FAILED") {
@@ -676,6 +742,18 @@ class parser
             ROS_ERROR_STREAM("" << __func__ << ": expected parameter count " << l.size() << " is not equal to 2.");
         }
     }
+
+    void raddr(std::string parameters)
+    {
+        diagnostic_msgs::KeyValue kv;
+        DMACAsync async_msg;
+        async_msg.header.stamp = ros::Time::now();
+        async_msg.async = "raddr";
+        kv.key = "value";
+        kv.value = parameters;
+        async_msg.map.push_back(kv);
+        pub_async_.publish(async_msg);
+    }
     
     void delivered(std::string parameters)
     {
@@ -803,6 +881,23 @@ class parser
         }
     }
 
+    void recv_std_extract(std::string raw)
+    { /* burst data publishing in std mode */
+
+        if (!raw.empty()) {
+            DMACPayload recv_msg;
+            Comms comms_msg;
+            
+            comms_msg.length = raw.length();
+            comms_msg.header.stamp = recv_msg.header.stamp = ros::Time::now();
+            recv_msg.type = DMACPayload::DMAC_BURST;
+            /* TODO: add remote address update tracking for std modem */
+            comms_msg.payload = recv_msg.payload = raw;
+            pub_recv_.publish(recv_msg);
+            pub_comms_.publish(comms_msg);
+        }
+    }
+    
     void recv_extract(int pid, int len, std::string tail)
     {
        static const boost::regex recv_regex("^,([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),([^,]*),(.*)");
