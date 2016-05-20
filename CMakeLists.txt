@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   diagnostic_msgs
+  geometry_msgs
   message_generation
 )
 
