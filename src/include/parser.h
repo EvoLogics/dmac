@@ -980,7 +980,7 @@ class parser
                recvim_msg.type = DMACPayload::DMAC_IM;
                comms_msg.source.id = recvim_msg.source_address = boost::lexical_cast<int>(recvim_matches[1]);
                recvim_msg.destination_address = boost::lexical_cast<int>(recvim_matches[2]);
-               recvim_msg.duration = boost::lexical_cast<int>(recvim_matches[4]);
+               recvim_msg.duration = boost::lexical_cast<uint32_t>(recvim_matches[4]);
                recvim_msg.rssi = boost::lexical_cast<int>(recvim_matches[5]);
                recvim_msg.integrity = boost::lexical_cast<int>(recvim_matches[6]);
                recvim_msg.relative_velocity = boost::lexical_cast<double>(recvim_matches[7]);
@@ -1059,8 +1059,8 @@ class parser
                recvims_msg.type = DMACPayload::DMAC_IMS;
                comms_msg.source.id = recvims_msg.source_address = boost::lexical_cast<int>(recvims_matches[1]);
                recvims_msg.destination_address = boost::lexical_cast<int>(recvims_matches[2]);
-               recvims_msg.timestamp = boost::lexical_cast<int>(recvims_matches[3]);
-               recvims_msg.duration = boost::lexical_cast<int>(recvims_matches[4]);
+               recvims_msg.timestamp = boost::lexical_cast<uint32_t>(recvims_matches[3]);
+               recvims_msg.duration = boost::lexical_cast<uint32_t>(recvims_matches[4]);
                recvims_msg.rssi = boost::lexical_cast<int>(recvims_matches[5]);
                recvims_msg.integrity = boost::lexical_cast<int>(recvims_matches[6]);
                recvims_msg.relative_velocity = boost::lexical_cast<double>(recvims_matches[7]);
@@ -1116,7 +1116,7 @@ class parser
                recvpbm_msg.type = DMACPayload::DMAC_PBM;
                comms_msg.source.id = recvpbm_msg.source_address = boost::lexical_cast<int>(recvpbm_matches[1]);
                recvpbm_msg.destination_address = boost::lexical_cast<int>(recvpbm_matches[2]);
-               recvpbm_msg.duration = boost::lexical_cast<int>(recvpbm_matches[3]);
+               recvpbm_msg.duration = boost::lexical_cast<uint32_t>(recvpbm_matches[3]);
                recvpbm_msg.rssi = boost::lexical_cast<int>(recvpbm_matches[4]);
                recvpbm_msg.integrity = boost::lexical_cast<int>(recvpbm_matches[5]);
                recvpbm_msg.relative_velocity = boost::lexical_cast<double>(recvpbm_matches[6]);
