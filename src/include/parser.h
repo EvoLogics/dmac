@@ -89,7 +89,7 @@ class parser
         pub_usblfix_ = nh_.advertise<mUSBLFix>(config.node_name + "/measurement/usbl_fix", 100);
         pub_sync_ = nh_.advertise<DMACSync>(config.node_name + "/sync", 100);
         sub_sync_ = nh_.subscribe(config.node_name + "/sync", 100, &parser::syncCallback, this);
-        sub_sync_ = nh_.subscribe(config.node_name + "/send", 100, &parser::sendCallback, this);
+        sub_send_ = nh_.subscribe(config.node_name + "/send", 100, &parser::sendCallback, this);
         comm_ = comm;
     }
 
