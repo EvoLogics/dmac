@@ -71,9 +71,11 @@ typedef enum { WAITSYNC_NO = 0,
 class parser
 {
   public:
-  parser(dmac_filter_type filter, dmac::config &config, dmac::comm_middlemen *comm)
+  parser(boost::asio::io_service& io_service, dmac_filter_type filter, dmac::config &config, dmac::comm_middlemen *comm)
         :  filter_(filter),
         config_(config),
+        io_service_(io_service),
+        answer_timer_(io_service),
         mode_(DMAC_DATA_MODE),
         waitsync_(WAITSYNC_NO),
         request_(""),
@@ -120,7 +122,7 @@ class parser
             after = more_.length();
         } while (after > 0 && after != before);
     }
-
+    
     void sendCallback(const dmac::DMACPayload::ConstPtr& msg)
     {
         if (waitsync_ == WAITSYNC_NO) {
@@ -135,7 +137,7 @@ class parser
                 stream << prefix << "AT" << request_ << "," << msg->payload.length() <<
                     "," << (int)msg->destination_address << "," << msg->payload << eol_;
                 std::string msg = stream.str();
-                comm_->send(msg);
+                sendSync(msg);
                 break;
             }
             case DMACPayload::DMAC_IM: {
@@ -145,7 +147,7 @@ class parser
                 stream << prefix << "AT" << request_ << "," << msg->payload.length() <<
                     "," << (int)msg->destination_address << "," << ack << "," << msg->payload << eol_;
                 std::string msg = stream.str();
-                comm_->send(msg);
+                sendSync(msg);
                 break;
             }
             case DMACPayload::DMAC_IMS: {
@@ -156,7 +158,7 @@ class parser
                     (msg->timestamp_undefined ? std::string("") : boost::lexical_cast<std::string>(msg->timestamp)) <<
                     "," << msg->payload << eol_;
                 std::string msg = stream.str();
-                comm_->send(msg);
+                sendSync(msg);
                 break;
             }
             case DMACPayload::DMAC_PBM: {
@@ -165,7 +167,7 @@ class parser
                 stream << prefix << "AT" << request_ << "," << msg->payload.length() <<
                     "," << (int)msg->destination_address << "," << msg->payload << eol_;
                 std::string msg = stream.str();
-                comm_->send(msg);
+                sendSync(msg);
                 break;
             }
             default:
@@ -174,6 +176,7 @@ class parser
             }
         } else {
             waitsync_ = WAITSYNC_NO;
+            answer_timer_.cancel();
             ROS_ERROR_STREAM("" << __func__ << ": sequence error");
         }
     }
@@ -200,19 +203,36 @@ class parser
                     waitsync_ = WAITSYNC_BINARY;
                 } else if (msg->command == "O") {
                     waitsync_ = WAITSYNC_NO;
+                    answer_timer_.cancel();
                 }
                 request_ = boost::to_upper_copy<std::string>(msg->command);
                 std::string prefix = ((filter_ == DMAC_AT && mode_ == DMAC_DATA_MODE) ? "+++" : "");
                 request_parameters_ = msg->parameters;
                 std::string telegram = prefix + "AT" + request_ + msg->parameters + eol_;
-                comm_->send(telegram);
+                sendSync(telegram);
             }
         } else {
             ROS_ERROR_STREAM("" << __func__ << ": sequence error");
         }
     }
+
+    void handle_answer_timeout(const boost::system::error_code& error) {
+        if (error == boost::asio::error::operation_aborted) {
+            return;
+        }
+        ROS_ERROR_STREAM("Answer timeout: waitsync: " << waitsync_);
+
+        DMACSync sync_msg;
+        sync_msg.header.stamp = ros::Time::now();
+        sync_msg.command = request_;
+        sync_msg.parameters = request_parameters_;
+        sync_msg.report = "ERROR ANSWER TIMEOUT";
+        waitsync_ = WAITSYNC_NO;
+        pub_sync_.publish(sync_msg);
+    }
     
   private:
+    boost::asio::io_service& io_service_;
     dmac::comm_middlemen *comm_;
     /* parser state */
     ros::NodeHandle nh_;
@@ -226,6 +246,7 @@ class parser
     int pid_;
     dmac::config config_;
     std::string more_;
+    boost::asio::deadline_timer answer_timer_;
 
     ros::Publisher pub_recv_;
     ros::Publisher pub_comms_;
@@ -235,6 +256,28 @@ class parser
     ros::Publisher pub_sync_;
     ros::Subscriber sub_sync_;
     ros::Subscriber sub_send_;
+
+    void sendSync(std::string &message)
+    {
+        comm_->send(message);
+        
+        answer_timer_.cancel();
+        answer_timer_.expires_from_now(boost::posix_time::milliseconds(1000));
+        answer_timer_.async_wait(boost::bind(&parser::handle_answer_timeout, this,
+                                             boost::asio::placeholders::error));
+    }
+
+    void publishSync(std::string &report)
+    {
+        waitsync_ = WAITSYNC_NO;
+
+        DMACSync sync_msg;
+        sync_msg.header.stamp = ros::Time::now();
+        sync_msg.command = request_;
+        sync_msg.parameters = request_parameters_;
+        sync_msg.report = report;
+        pub_sync_.publish(sync_msg);
+    }
     
     void to_term_at()
     { /* bes_split */
@@ -342,14 +385,10 @@ class parser
                     static const boost::regex error_regex("^((ERROR|BUSY) (.*?))\r\n(.*)");
                     boost::smatch error_matches;
                     if (boost::regex_match(more_, error_matches, error_regex)) {
-                        DMACSync sync_msg;
-                        sync_msg.header.stamp = ros::Time::now();
-                        sync_msg.command = request_;
-                        sync_msg.parameters = request_parameters_;
-                        sync_msg.report = error_matches[1];
+                        std::string report = error_matches[1];
                         more_.erase(0, error_matches[1].str().length() + 2);
-                        waitsync_ = WAITSYNC_NO;
-                        pub_sync_.publish(sync_msg);
+                        answer_timer_.cancel();
+                        publishSync(report);
                     } else {
                         /* the rest is sync answer, may be not yet full one */
                         switch (waitsync_) {
@@ -365,14 +404,10 @@ class parser
                             #define DMAC_EOT_LEN (waitsync_ == WAITSYNC_SINGLELINE ? 2 : 3)
                             size_t pos = more_.find(DMAC_EOT);
                             if (pos != std::string::npos) {
-                                DMACSync sync_msg;
-                                sync_msg.header.stamp = ros::Time::now();
-                                sync_msg.command = request_;
-                                sync_msg.parameters = request_parameters_;
-                                sync_msg.report = more_.substr(0, pos + DMAC_EOT_LEN);
+                                std::string report = more_.substr(0, pos + DMAC_EOT_LEN);
                                 more_.erase(0, pos + DMAC_EOT_LEN);
-                                waitsync_ = WAITSYNC_NO;
-                                pub_sync_.publish(sync_msg);
+                                answer_timer_.cancel();
+                                publishSync(report);
                             } else {
                                 ROS_WARN_STREAM("need more data: " << more_.data());
                             }

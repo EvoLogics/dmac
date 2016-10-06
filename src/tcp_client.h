@@ -53,7 +53,7 @@ public:
         socket_(io_service),
         reconnect_timer_(io_service),
         endpoint_iterator_(endpoint_iterator),
-        parser_(dmac::DMAC_NET, config, this)
+        parser_(io_service, dmac::DMAC_NET, config, this)
   {
     mem_.resize(capacity_);
     connect();
