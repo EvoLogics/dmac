@@ -45,7 +45,6 @@
 #include "dmac/DMACSync.h"
 #include "dmac/mUSBLFix.h"
 #include "diagnostic_msgs/KeyValue.h"
-#include "comms_msgs/Comms.h"
 
 #include "comm_middlemen.h"
 #include "config.h"
@@ -56,12 +55,12 @@ using dmac::DMACRaw;
 using dmac::DMACAsync;
 using dmac::DMACSync;
 using dmac::mUSBLFix;
-using comms_msgs::Comms;
 
 namespace dmac
 {
 
-typedef enum { DMAC_AT = 0, DMAC_NET = 1 } dmac_filter_type;
+typedef enum { DMAC_UNDEF = 0, DMAC_READY = 1 } dmac_filter_state;
+typedef enum { DMAC_UNKNOWN = 0, DMAC_AT = 1, DMAC_NET = 2 } dmac_filter_type;
 typedef enum { DMAC_DATA_MODE = 0, DMAC_COMMAND_MODE = 1 } dmac_filter_mode;
 typedef enum { WAITSYNC_NO = 0,
                WAITSYNC_SINGLELINE = 1,
@@ -71,11 +70,12 @@ typedef enum { WAITSYNC_NO = 0,
 class parser
 {
   public:
-  parser(boost::asio::io_service& io_service, dmac_filter_type filter, dmac::config &config, dmac::comm_middlemen *comm)
-        :  filter_(filter),
+  parser(boost::asio::io_service& io_service, dmac::config &config, dmac::comm_middlemen *comm)
+        :  filter_(DMAC_AT),
         config_(config),
         io_service_(io_service),
         answer_timer_(io_service),
+        state_(DMAC_UNDEF),
         mode_(DMAC_DATA_MODE),
         waitsync_(WAITSYNC_NO),
         request_(""),
@@ -86,7 +86,6 @@ class parser
     {
         pub_recv_ = nh_.advertise<DMACPayload>(config.node_name + "/recv", 100);
         pub_async_ = nh_.advertise<DMACAsync>(config.node_name + "/async", 100);
-        pub_comms_ = nh_.advertise<Comms>(config.node_name + "/inbox", 100);  
         pub_raw_ = nh_.advertise<DMACRaw>(config.node_name + "/raw", 100);
         pub_usblfix_ = nh_.advertise<mUSBLFix>(config.node_name + "/measurement/usbl_fix", 100);
         pub_sync_ = nh_.advertise<DMACSync>(config.node_name + "/sync", 100);
@@ -105,12 +104,8 @@ class parser
         ROS_INFO_STREAM("Parsing new data: " << schunk);
         ROS_INFO_STREAM("more_: " << more_);
         more_ += schunk;
-
-        DMACRaw raw_msg;
-        raw_msg.stamp = ros::Time::now();
-        raw_msg.command = schunk;
-        pub_raw_.publish(raw_msg);
-
+        publishRaw(schunk);
+        
         size_t before, after;
         do {
             before = more_.length();
@@ -231,6 +226,7 @@ class parser
     ros::NodeHandle nh_;
     dmac_filter_type filter_;
     dmac_filter_mode mode_;
+    dmac_filter_state state_;
     dmac_waitsync_status waitsync_;
     std::string request_;
     std::string request_parameters_;
@@ -242,7 +238,6 @@ class parser
     boost::asio::deadline_timer answer_timer_;
 
     ros::Publisher pub_recv_;
-    ros::Publisher pub_comms_;
     ros::Publisher pub_raw_;
     ros::Publisher pub_async_;
     ros::Publisher pub_usblfix_;
@@ -260,6 +255,14 @@ class parser
                                              boost::asio::placeholders::error));
     }
 
+    void publishRaw(std::string raw)
+    {
+        DMACRaw raw_msg;
+        raw_msg.stamp = ros::Time::now();
+        raw_msg.command = raw;
+        pub_raw_.publish(raw_msg);
+    }
+    
     void publishSync(std::string report, dmac_waitsync_status waitsync)
     {
         waitsync_ = waitsync;
@@ -270,6 +273,21 @@ class parser
         sync_msg.parameters = request_parameters_;
         sync_msg.report = report;
         pub_sync_.publish(sync_msg);
+    }
+
+    void publishUSBLFix(mUSBLFix &fix)
+    {
+        pub_usblfix_.publish(fix);
+    }
+    
+    void publishRecv(DMACPayload &rcv)
+    {
+        pub_recv_.publish(rcv);
+    }
+
+    void publishAsync(DMACAsync &async)
+    {
+        pub_async_.publish(async);
     }
     
     void to_term_at()
@@ -477,7 +495,7 @@ class parser
         DMACAsync async_msg;
         async_msg.header.stamp = ros::Time::now();
         async_msg.async = "recvstart";
-        pub_async_.publish(async_msg);
+        publishAsync(async_msg);
     }
     
     void recvend(std::string parameters)
@@ -495,7 +513,7 @@ class parser
             KEYVALUE_HELPER(async_msg, "duration", l);
             KEYVALUE_HELPER(async_msg, "rssi", l);
             KEYVALUE_HELPER(async_msg, "integrity", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -517,7 +535,7 @@ class parser
             KEYVALUE_HELPER(async_msg, "relative_velocity", l);
             KEYVALUE_HELPER(async_msg, "rssi", l);
             KEYVALUE_HELPER(async_msg, "integrity", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -530,7 +548,7 @@ class parser
         DMACAsync async_msg;
         async_msg.header.stamp = ros::Time::now();
         async_msg.async = "phyoff";
-        pub_async_.publish(async_msg);
+        publishAsync(async_msg);
     }
     
     void phyon(std::string parameters)
@@ -538,7 +556,7 @@ class parser
         DMACAsync async_msg;
         async_msg.header.stamp = ros::Time::now();
         async_msg.async = "phyon";
-        pub_async_.publish(async_msg);
+        publishAsync(async_msg);
     }
     
     void sendstart(std::string parameters)
@@ -556,7 +574,7 @@ class parser
             KEYVALUE_HELPER(async_msg, "type", l);
             KEYVALUE_HELPER(async_msg, "duration", l);
             KEYVALUE_HELPER(async_msg, "delay", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -579,7 +597,7 @@ class parser
             KEYVALUE_HELPER(async_msg, "type", l);
             KEYVALUE_HELPER(async_msg, "timestamp", l);
             KEYVALUE_HELPER(async_msg, "duration", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -625,7 +643,7 @@ class parser
             fix_msg.sound_speed = 1500;
             fix_msg.range = boost::lexical_cast<double>(*it++) * fix_msg.sound_speed * 1e-6;
 
-            pub_usblfix_.publish(fix_msg);
+            publishUSBLFix(fix_msg);
         }
         else
         {
@@ -669,7 +687,7 @@ class parser
                 fix_msg.elevation = 0;
             }
             fix_msg.sound_speed = 1500;
-            pub_usblfix_.publish(fix_msg);
+            publishUSBLFix(fix_msg);
         }
         else
         {
@@ -700,7 +718,7 @@ class parser
             KEYVALUE_HELPER(async_msg, "delay 4-1", l);
             KEYVALUE_HELPER(async_msg, "delay 3-2", l);
             KEYVALUE_HELPER(async_msg, "delay 3-4", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -742,7 +760,7 @@ class parser
             KEYVALUE_HELPER(async_msg, "X254", l);
             KEYVALUE_HELPER(async_msg, "Y254", l);
             KEYVALUE_HELPER(async_msg, "Z254", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -763,7 +781,7 @@ class parser
             async_msg.async = "bitrate";
             KEYVALUE_HELPER(async_msg, "direction", l);
             KEYVALUE_HELPER(async_msg, "value", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -780,7 +798,7 @@ class parser
         kv.key = "value";
         kv.value = parameters;
         async_msg.map.push_back(kv);
-        pub_async_.publish(async_msg);
+        publishAsync(async_msg);
     }
     
     void delivered(std::string parameters)
@@ -800,7 +818,7 @@ class parser
                 KEYVALUE_HELPER(async_msg, "counter", l);
             }
             KEYVALUE_HELPER(async_msg, "destination_address", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -825,7 +843,7 @@ class parser
                 KEYVALUE_HELPER(async_msg, "counter", l);
             }
             KEYVALUE_HELPER(async_msg, "destination_address", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -847,7 +865,7 @@ class parser
             l.pop_front();
             async_msg.async = "canceled" + boost::to_lower_copy<std::string>(type);
             KEYVALUE_HELPER(async_msg, "destination_address", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -869,7 +887,7 @@ class parser
             l.pop_front();
             async_msg.async = "expired" + boost::to_lower_copy<std::string>(type);
             KEYVALUE_HELPER(async_msg, "destination_address", l);
-            pub_async_.publish(async_msg);
+            publishAsync(async_msg);
         }
         else
         {
@@ -886,7 +904,7 @@ class parser
         kv.key = "value";
         kv.value = parameters;
         async_msg.map.push_back(kv);
-        pub_async_.publish(async_msg);
+        publishAsync(async_msg);
     }
     
     void rcv_extract(std::string recv, int pid, int len, std::string tail)
@@ -914,15 +932,12 @@ class parser
 
         if (!raw.empty()) {
             DMACPayload recv_msg;
-            Comms comms_msg;
             
-            comms_msg.length = raw.length();
-            comms_msg.header.stamp = recv_msg.header.stamp = ros::Time::now();
+            recv_msg.header.stamp = ros::Time::now();
             recv_msg.type = DMACPayload::DMAC_BURST;
             /* TODO: add remote address update tracking for std modem */
-            comms_msg.payload = recv_msg.payload = raw;
-            pub_recv_.publish(recv_msg);
-            pub_comms_.publish(comms_msg);
+            recv_msg.payload = raw;
+            publishRecv(recv_msg);
         }
     }
     
@@ -932,28 +947,23 @@ class parser
        boost::smatch recv_matches;
 
        DMACPayload recv_msg;
-       Comms comms_msg;
 
        if (boost::regex_match(tail, recv_matches, recv_regex))
        { /* format matched, check length */
            if (len + 2 <= recv_matches[8].str().length())
            {
-               comms_msg.length = len;
-               comms_msg.header.stamp = recv_msg.header.stamp = ros::Time::now();
+               recv_msg.header.stamp = ros::Time::now();
                recv_msg.type = DMACPayload::DMAC_BURST;
                recv_msg.ack = false;
                recv_msg.force = false;
-               comms_msg.source.id = recv_msg.source_address = boost::lexical_cast<int>(recv_matches[1]);
+               recv_msg.source_address = boost::lexical_cast<int>(recv_matches[1]);
                recv_msg.destination_address = boost::lexical_cast<int>(recv_matches[2]);
                recv_msg.bitrate = boost::lexical_cast<int>(recv_matches[3]);
                recv_msg.rssi = boost::lexical_cast<int>(recv_matches[4]);
                recv_msg.integrity = boost::lexical_cast<int>(recv_matches[5]);
                recv_msg.propagation_time = boost::lexical_cast<double>(recv_matches[6]);
                recv_msg.relative_velocity = boost::lexical_cast<double>(recv_matches[7]);
-
-               comms_msg.source.name = comms_msg.source.role =
-                   recv_msg.source_name = recv_matches[1];
-
+               recv_msg.source_name = recv_matches[1];
                recv_msg.destination_name = recv_matches[2];
 
                std::string rest = recv_matches[8].str();
@@ -961,10 +971,9 @@ class parser
                boost::smatch recv_payload_matches;
                if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
                {
-                   comms_msg.payload = recv_msg.payload = recv_payload_matches[1].str();
+                   recv_msg.payload = recv_payload_matches[1].str();
                    more_ = recv_payload_matches[2].str();
-                   pub_recv_.publish(recv_msg);
-                   pub_comms_.publish(comms_msg);
+                   publishRecv(recv_msg);
                }
                else
                {
@@ -997,30 +1006,23 @@ class parser
        boost::smatch recvim_matches;
 
        DMACPayload recvim_msg;
-       Comms comms_msg;
 
        if (boost::regex_match(tail, recvim_matches, recvim_regex))
        { /* format matched, check length */
            if (len + 2 <= recvim_matches[8].str().length())
            {
                /* todo: add names parameter */
-               comms_msg.length = len;
-               comms_msg.header.stamp = recvim_msg.header.stamp = ros::Time::now();
+               recvim_msg.header.stamp = ros::Time::now();
                recvim_msg.type = DMACPayload::DMAC_IM;
-               comms_msg.source.id = recvim_msg.source_address = boost::lexical_cast<int>(recvim_matches[1]);
+               recvim_msg.source_address = boost::lexical_cast<int>(recvim_matches[1]);
                recvim_msg.destination_address = boost::lexical_cast<int>(recvim_matches[2]);
                recvim_msg.duration = boost::lexical_cast<uint32_t>(recvim_matches[4]);
                recvim_msg.rssi = boost::lexical_cast<int>(recvim_matches[5]);
                recvim_msg.integrity = boost::lexical_cast<int>(recvim_matches[6]);
                recvim_msg.relative_velocity = boost::lexical_cast<double>(recvim_matches[7]);
-
-               comms_msg.source.name = comms_msg.source.role =
-                   recvim_msg.source_name = recvim_matches[1];
-
+               recvim_msg.source_name = recvim_matches[1];
                recvim_msg.destination_name = recvim_matches[2];
-               
                /* todo: check lexical_cast with wrong data */
-
                if (recvim_matches[3] == "ack")
                {
                    recvim_msg.ack = true;
@@ -1047,10 +1049,9 @@ class parser
                boost::smatch recvim_payload_matches;
                if (boost::regex_match(rest, recvim_payload_matches, recvim_payload_regex))
                {
-                   comms_msg.payload = recvim_msg.payload = recvim_payload_matches[1].str();
+                   recvim_msg.payload = recvim_payload_matches[1].str();
                    more_ = recvim_payload_matches[2].str();
-                   pub_recv_.publish(recvim_msg);
-                   pub_comms_.publish(comms_msg);
+                   publishRecv(recvim_msg);
                }
                else
                {
@@ -1078,45 +1079,38 @@ class parser
         boost::smatch recvims_matches;
         
         DMACPayload recvims_msg;
-        Comms comms_msg;
         
         if (boost::regex_match(tail, recvims_matches, recvims_regex))
         { /* format matched, check length */
             if (len + 2 <= recvims_matches[8].str().length())
             {
-               comms_msg.length = len;
-               comms_msg.header.stamp = recvims_msg.header.stamp = ros::Time::now();
-               recvims_msg.type = DMACPayload::DMAC_IMS;
-               comms_msg.source.id = recvims_msg.source_address = boost::lexical_cast<int>(recvims_matches[1]);
-               recvims_msg.destination_address = boost::lexical_cast<int>(recvims_matches[2]);
-               recvims_msg.timestamp = boost::lexical_cast<uint32_t>(recvims_matches[3]);
-               recvims_msg.duration = boost::lexical_cast<uint32_t>(recvims_matches[4]);
-               recvims_msg.rssi = boost::lexical_cast<int>(recvims_matches[5]);
-               recvims_msg.integrity = boost::lexical_cast<int>(recvims_matches[6]);
-               recvims_msg.relative_velocity = boost::lexical_cast<double>(recvims_matches[7]);
-
-               comms_msg.source.name = comms_msg.source.role =
-                   recvims_msg.source_name = recvims_matches[1];
-
-               recvims_msg.destination_name = recvims_matches[2];
-
-               std::string rest = recvims_matches[8].str();
-               boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
-               boost::smatch recv_payload_matches;
-               if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
-               {
-                   comms_msg.payload = recvims_msg.payload = recv_payload_matches[1].str();
-                   more_ = recv_payload_matches[2].str();
-                   pub_recv_.publish(recvims_msg);
-                   pub_comms_.publish(comms_msg);
-               }
-               else
-               {
-                   ROS_ERROR_STREAM("Cannot extract payload of length: "
-                                    << len << ": in "
-                                    << recvims_matches[8].str());
-                   more_.erase(0, more_.find("\r\n") + 2);
-               }
+                recvims_msg.header.stamp = ros::Time::now();
+                recvims_msg.type = DMACPayload::DMAC_IMS;
+                recvims_msg.source_address = boost::lexical_cast<int>(recvims_matches[1]);
+                recvims_msg.destination_address = boost::lexical_cast<int>(recvims_matches[2]);
+                recvims_msg.timestamp = boost::lexical_cast<uint32_t>(recvims_matches[3]);
+                recvims_msg.duration = boost::lexical_cast<uint32_t>(recvims_matches[4]);
+                recvims_msg.rssi = boost::lexical_cast<int>(recvims_matches[5]);
+                recvims_msg.integrity = boost::lexical_cast<int>(recvims_matches[6]);
+                recvims_msg.relative_velocity = boost::lexical_cast<double>(recvims_matches[7]);
+                recvims_msg.source_name = recvims_matches[1];
+                recvims_msg.destination_name = recvims_matches[2];
+                std::string rest = recvims_matches[8].str();
+                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
+                boost::smatch recv_payload_matches;
+                if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
+                {
+                    recvims_msg.payload = recv_payload_matches[1].str();
+                    more_ = recv_payload_matches[2].str();
+                    publishRecv(recvims_msg);
+                }
+                else
+                {
+                    ROS_ERROR_STREAM("Cannot extract payload of length: "
+                                     << len << ": in "
+                                     << recvims_matches[8].str());
+                    more_.erase(0, more_.find("\r\n") + 2);
+                }
             }
             else
             {
@@ -1136,44 +1130,37 @@ class parser
         boost::smatch recvpbm_matches;
         
         DMACPayload recvpbm_msg;
-        Comms comms_msg;
         
         if (boost::regex_match(tail, recvpbm_matches, recvpbm_regex))
         { /* format matched, check length */
             if (len + 2 <= recvpbm_matches[7].str().length())
             {
-               comms_msg.length = len;
-               comms_msg.header.stamp = recvpbm_msg.header.stamp = ros::Time::now();
-               recvpbm_msg.type = DMACPayload::DMAC_PBM;
-               comms_msg.source.id = recvpbm_msg.source_address = boost::lexical_cast<int>(recvpbm_matches[1]);
-               recvpbm_msg.destination_address = boost::lexical_cast<int>(recvpbm_matches[2]);
-               recvpbm_msg.duration = boost::lexical_cast<uint32_t>(recvpbm_matches[3]);
-               recvpbm_msg.rssi = boost::lexical_cast<int>(recvpbm_matches[4]);
-               recvpbm_msg.integrity = boost::lexical_cast<int>(recvpbm_matches[5]);
-               recvpbm_msg.relative_velocity = boost::lexical_cast<double>(recvpbm_matches[6]);
-
-               comms_msg.source.name = comms_msg.source.role =
-                   recvpbm_msg.source_name = recvpbm_matches[1];
-
-               recvpbm_msg.destination_name = recvpbm_matches[2];
-
-               std::string rest = recvpbm_matches[7].str();
-               boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
-               boost::smatch recv_payload_matches;
-               if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
-               {
-                   comms_msg.payload = recvpbm_msg.payload = recv_payload_matches[1].str();
-                   more_ = recv_payload_matches[2].str();
-                   pub_recv_.publish(recvpbm_msg);
-                   pub_comms_.publish(comms_msg);
-               }
-               else
-               {
-                   ROS_ERROR_STREAM("Cannot extract payload of length: "
-                                    << len << ": in "
-                                    << recvpbm_matches[7].str());
-                   more_.erase(0, more_.find("\r\n") + 2);
-               }
+                recvpbm_msg.header.stamp = ros::Time::now();
+                recvpbm_msg.type = DMACPayload::DMAC_PBM;
+                recvpbm_msg.source_address = boost::lexical_cast<int>(recvpbm_matches[1]);
+                recvpbm_msg.destination_address = boost::lexical_cast<int>(recvpbm_matches[2]);
+                recvpbm_msg.duration = boost::lexical_cast<uint32_t>(recvpbm_matches[3]);
+                recvpbm_msg.rssi = boost::lexical_cast<int>(recvpbm_matches[4]);
+                recvpbm_msg.integrity = boost::lexical_cast<int>(recvpbm_matches[5]);
+                recvpbm_msg.relative_velocity = boost::lexical_cast<double>(recvpbm_matches[6]);
+                recvpbm_msg.source_name = recvpbm_matches[1];
+                recvpbm_msg.destination_name = recvpbm_matches[2];
+                std::string rest = recvpbm_matches[7].str();
+                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
+                boost::smatch recv_payload_matches;
+                if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
+                {
+                    recvpbm_msg.payload = recv_payload_matches[1].str();
+                    more_ = recv_payload_matches[2].str();
+                    publishRecv(recvpbm_msg);
+                }
+                else
+                {
+                    ROS_ERROR_STREAM("Cannot extract payload of length: "
+                                     << len << ": in "
+                                     << recvpbm_matches[7].str());
+                    more_.erase(0, more_.find("\r\n") + 2);
+                }
             }
             else
             {
