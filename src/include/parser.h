@@ -928,9 +928,10 @@ class parser
 
                recv_msg.destination_name = recv_matches[2];
 
+               std::string rest = recvim_matches[8].str();
                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recv_payload_matches;
-               if (boost::regex_match(recv_matches[8].str(), recv_payload_matches, recv_payload_regex))
+               if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
                {
                    comms_msg.payload = recv_msg.payload = recv_payload_matches[1].str();
                    more_ = recv_payload_matches[2].str();
@@ -1013,9 +1014,10 @@ class parser
                    more_.erase(0, more_.find("\r\n") + 2);
                    return;
                }
+               std::string rest = recvim_matches[8].str();
                boost::regex recvim_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recvim_payload_matches;
-               if (boost::regex_match(recvim_matches[8].str(), recvim_payload_matches, recvim_payload_regex))
+               if (boost::regex_match(rest, recvim_payload_matches, recvim_payload_regex))
                {
                    comms_msg.payload = recvim_msg.payload = recvim_payload_matches[1].str();
                    more_ = recvim_payload_matches[2].str();
@@ -1070,9 +1072,10 @@ class parser
 
                recvims_msg.destination_name = recvims_matches[2];
 
+               std::string rest = recvim_matches[8].str();
                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recv_payload_matches;
-               if (boost::regex_match(recvims_matches[8].str(), recv_payload_matches, recv_payload_regex))
+               if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
                {
                    comms_msg.payload = recvims_msg.payload = recv_payload_matches[1].str();
                    more_ = recv_payload_matches[2].str();
@@ -1126,9 +1129,10 @@ class parser
 
                recvpbm_msg.destination_name = recvpbm_matches[2];
 
+               std::string rest = recvim_matches[7].str();
                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recv_payload_matches;
-               if (boost::regex_match(recvpbm_matches[7].str(), recv_payload_matches, recv_payload_regex))
+               if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
                {
                    comms_msg.payload = recvpbm_msg.payload = recv_payload_matches[1].str();
                    more_ = recv_payload_matches[2].str();
@@ -1154,6 +1158,7 @@ class parser
             more_.erase(0, more_.find("\r\n") + 2);
         }
     }
+    
 };
 
 }  // namespace
