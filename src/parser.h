@@ -175,8 +175,7 @@ class parser
                 break;
             }
         } else {
-            waitsync_ = WAITSYNC_NO;
-            answer_timer_.cancel();
+            publishSync("ERROR SEQUENCE ERROR", waitsync_);
             ROS_ERROR_STREAM("" << __func__ << ": sequence error");
         }
     }
@@ -213,6 +212,7 @@ class parser
             }
         } else {
             ROS_ERROR_STREAM("" << __func__ << ": sequence error");
+            publishSync("ERROR SEQUENCE ERROR", waitsync_);
         }
     }
 
@@ -221,14 +221,7 @@ class parser
             return;
         }
         ROS_ERROR_STREAM("Answer timeout: waitsync: " << waitsync_);
-
-        DMACSync sync_msg;
-        sync_msg.header.stamp = ros::Time::now();
-        sync_msg.command = request_;
-        sync_msg.parameters = request_parameters_;
-        sync_msg.report = "ERROR ANSWER TIMEOUT";
-        waitsync_ = WAITSYNC_NO;
-        pub_sync_.publish(sync_msg);
+        publishSync("ERROR ANSWER TIMEOUT", WAITSYNC_NO);
     }
     
   private:
@@ -267,9 +260,9 @@ class parser
                                              boost::asio::placeholders::error));
     }
 
-    void publishSync(std::string &report)
+    void publishSync(std::string report, dmac_waitsync_status waitsync)
     {
-        waitsync_ = WAITSYNC_NO;
+        waitsync_ = waitsync;
 
         DMACSync sync_msg;
         sync_msg.header.stamp = ros::Time::now();
@@ -388,7 +381,7 @@ class parser
                         std::string report = error_matches[1];
                         more_.erase(0, error_matches[1].str().length() + 2);
                         answer_timer_.cancel();
-                        publishSync(report);
+                        publishSync(report, WAITSYNC_NO);
                     } else {
                         /* the rest is sync answer, may be not yet full one */
                         switch (waitsync_) {
@@ -407,7 +400,7 @@ class parser
                                 std::string report = more_.substr(0, pos + DMAC_EOT_LEN);
                                 more_.erase(0, pos + DMAC_EOT_LEN);
                                 answer_timer_.cancel();
-                                publishSync(report);
+                                publishSync(report, WAITSYNC_NO);
                             } else {
                                 ROS_WARN_STREAM("need more data: " << more_.data());
                             }
