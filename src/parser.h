@@ -928,7 +928,7 @@ class parser
 
                recv_msg.destination_name = recv_matches[2];
 
-               std::string rest = recvim_matches[8].str();
+               std::string rest = recv_matches[8].str();
                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recv_payload_matches;
                if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
@@ -1072,7 +1072,7 @@ class parser
 
                recvims_msg.destination_name = recvims_matches[2];
 
-               std::string rest = recvim_matches[8].str();
+               std::string rest = recvims_matches[8].str();
                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recv_payload_matches;
                if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))
@@ -1129,7 +1129,7 @@ class parser
 
                recvpbm_msg.destination_name = recvpbm_matches[2];
 
-               std::string rest = recvim_matches[7].str();
+               std::string rest = recvpbm_matches[7].str();
                boost::regex recv_payload_regex("^(.{" + boost::lexical_cast<std::string>(len) + "})\r\n(.*)");
                boost::smatch recv_payload_matches;
                if (boost::regex_match(rest, recv_payload_matches, recv_payload_regex))

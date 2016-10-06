@@ -35,9 +35,9 @@
 #include <string>
 #include <sstream>
 
-#include "include/comm_middlemen.h"
-#include "include/tcp_client.h"
-#include "include/config.h"
+#include "comm_middlemen.h"
+#include "tcp_client.h"
+#include "config.h"
 
 namespace std {
     template<typename T>

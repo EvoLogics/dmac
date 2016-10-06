@@ -133,14 +133,14 @@ include_directories(
 #add_dependencies(beginner_tutorials ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-add_executable(dmac_driver src/dmac_driver.cpp)
+add_executable(dmac src/dmac_driver.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-add_dependencies(dmac_driver ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(dmac ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(dmac_driver
+target_link_libraries(dmac
   ${catkin_LIBRARIES}
 )
 #############
