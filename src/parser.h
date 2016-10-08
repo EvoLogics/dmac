@@ -278,6 +278,7 @@ class parser : public dmac::abstract_parser
     void sendSync(std::string &message)
     {
         comm_->send(message);
+        publishRaw(message);
         
         answer_timer_.cancel();
         answer_timer_.expires_from_now(boost::posix_time::milliseconds(1000));
