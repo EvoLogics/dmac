@@ -36,7 +36,7 @@
 
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
-
+ 
 #include <ros/ros.h>
 
 #include "dmac/DMACPayload.h"
@@ -100,11 +100,12 @@ namespace dmac
     class initializer
     {
     public:
-        initializer(dmac::abstract_parser *parser)
+        initializer(dmac::abstract_parser *parser, dmac::config *config)
             :  state_(IDLE),
             raw_buffer_("")
         {
             parser_ = parser;
+            config_ = config;
         }
 
         conf_state state(void)
@@ -114,6 +115,7 @@ namespace dmac
 
         void connected(void)
         {
+            initializer_it = config_->initializer_begin();
             handle_event(INTERNAL);
         }
 
@@ -126,6 +128,7 @@ namespace dmac
         {
             /* try again */
             state_ = IDLE;
+            initializer_it = config_->initializer_begin();
             handle_event(INTERNAL);
         }
 
@@ -169,6 +172,8 @@ namespace dmac
         conf_state state_;
         std::string raw_buffer_;
         dmac::abstract_parser *parser_;
+        dmac::config *config_;
+        std::vector<DMACSyncPtr>::iterator initializer_it;
         
         conf_state transition(conf_event event)
         {
@@ -329,21 +334,25 @@ namespace dmac
             ROS_INFO_STREAM("Handling " << conf_event_str(event) << " in state " << conf_state_str(state_));
             switch (event) {
             case YAR: {
-                next_event = DONE;
-                // L = evar(SM, yars),
-                // case L of
-                //   [] -> SM#sm{event = final};
-                //   nothing -> SM#sm{event = final};
-                //   _ ->
-                //     evar(SM, yars, tl(L)),
-                //     fsm:send_at_command(fsm:clear_timeouts(SM), hd(L))
-                // end;
+                if (initializer_it == config_->initializer_end()) {
+                    next_event = DONE;
+                } else {
+                    parser_->syncCallback(*initializer_it);
+                    initializer_it++;
+                }
                 break;
             }
             case RCV: {
-                next_event = DONE;
-                // {rcv, {sync, _, "OK"}} -> SM#sm{event = yet_another_request};
-                // {rcv, {sync, _, _}}    -> SM#sm{event = wrong_receive};
+                if (DMACSync* sync = dynamic_cast<DMACSync*>(msg)) {
+                    if (sync->report.compare(0,2,"OK") == 0 ||
+                        sync->report.compare(0,5,"[*]OK") == 0) {
+                        next_event = YAR;
+                    } else {
+                        next_event = WRONG_RCV;
+                    }
+                } else {
+                    ROS_ERROR_STREAM("Failed dynamic cast of msg " << msg);
+                }
                 break;
             }
             default:

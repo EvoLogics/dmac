@@ -56,6 +56,7 @@ public:
         parser_(io_service, config, this)
   {
     mem_.resize(capacity_);
+    config.load();
     connect();
   }      
 

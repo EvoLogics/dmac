@@ -32,7 +32,7 @@
 
 #include <ros/ros.h>
 
-#include <string>
+
 #include <sstream>
 
 #include "comm_middlemen.h"
@@ -52,27 +52,26 @@ int main(int argc, char* argv[])
 {
   // Initialize ROS.
   ros::init(argc, argv, "dmac_node");
-
-  dmac::config config;
   
   std::string IP, type;
   int port;
 
+  dmac::config config(ros::this_node::getName());
+  
   ros::param::param<std::string>(ros::this_node::getName() + "/modem_config/connection_type", type, "TCP/IP");
   boost::asio::io_service io_service;
   dmac::tcp_client *s = NULL;
   
   if (type == "TCP/IP") {
 
+    // initialiser: ["@ZX1", "@ZU1", "!C2"]
+      
       ros::param::param<std::string>(ros::this_node::getName() + "/modem_config/tcp_config/ip", IP, "192.168.6.2");
       ros::param::param<int>(ros::this_node::getName() + "/modem_config/tcp_config/port", port, 9200);
       
       ROS_INFO_STREAM("Connecting to IP: " << IP << ", port: " << port);
 
-      ros::param::param<bool>(ros::this_node::getName() + "/modem_config/hasAHRS", config.hasAHRS, false);
-      ROS_INFO_STREAM("hasAHRS: " << config.hasAHRS);
-
-      config.node_name = ros::this_node::getName();
+      // config.node_name = ros::this_node::getName();
       
       // Listen for TCP connections in background thread.
       tcp::resolver resolver(io_service);

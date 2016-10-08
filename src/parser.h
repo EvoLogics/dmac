@@ -77,15 +77,15 @@ class parser : public dmac::abstract_parser
         eol_("\n"),
         ext_networking_(false),
         pid_(0),
-        ini_(this)
+        ini_(this, &config)
     {
-        pub_recv_ = nh_.advertise<DMACPayload>(config.node_name + "/recv", 100);
-        pub_async_ = nh_.advertise<DMACAsync>(config.node_name + "/async", 100);
-        pub_raw_ = nh_.advertise<DMACRaw>(config.node_name + "/raw", 100);
-        pub_usblfix_ = nh_.advertise<mUSBLFix>(config.node_name + "/measurement/usbl_fix", 100);
-        pub_sync_ = nh_.advertise<DMACSync>(config.node_name + "/sync", 100);
-        sub_sync_ = nh_.subscribe(config.node_name + "/sync", 100, &parser::syncCallback, this);
-        sub_send_ = nh_.subscribe(config.node_name + "/send", 100, &parser::sendCallback, this);
+        pub_recv_ = nh_.advertise<DMACPayload>(config.nodeName() + "/recv", 100);
+        pub_async_ = nh_.advertise<DMACAsync>(config.nodeName() + "/async", 100);
+        pub_raw_ = nh_.advertise<DMACRaw>(config.nodeName() + "/raw", 100);
+        pub_usblfix_ = nh_.advertise<mUSBLFix>(config.nodeName() + "/measurement/usbl_fix", 100);
+        pub_sync_ = nh_.advertise<DMACSync>(config.nodeName() + "/sync", 100);
+        sub_sync_ = nh_.subscribe(config.nodeName() + "/sync", 100, &parser::syncCallback, this);
+        sub_send_ = nh_.subscribe(config.nodeName() + "/send", 100, &parser::sendCallback, this);
         comm_ = comm;
     }
 
@@ -718,7 +718,7 @@ class parser : public dmac::abstract_parser
             fix_msg.bearing_raw = lbearing;
             fix_msg.elevation_raw = lelevation;
             
-            if (config_.hasAHRS) {
+            if (config_.hasAHRS()) {
                 fix_msg.bearing = bearing;
                 fix_msg.elevation = elevation;
             } else {

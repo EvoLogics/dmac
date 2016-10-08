@@ -29,6 +29,12 @@
 #ifndef DMAC_CONFIG_H
 #define DMAC_CONFIG_H
 
+#include <string>
+#include <boost/lexical_cast.hpp>
+#include "dmac/DMACSync.h"
+
+using dmac::DMACSync;
+
 namespace dmac
 {
 
@@ -36,12 +42,77 @@ class config
 {
   public:
     
-  config() :
-    hasAHRS(false)
-    {};
+  config(std::string node_name) :
+      hasAHRS_(false),
+      node_name_(node_name)
+    {
+        commands_.clear();
+    };
+
+    std::string nodeName()
+    {
+        return node_name_;
+    }
+
+    bool hasAHRS()
+    {
+        return hasAHRS_;
+    }
+
+    std::vector<DMACSyncPtr> commands()
+    {
+        return commands_;
+    }
+
+    std::vector<DMACSyncPtr>::iterator initializer_begin()
+    {
+        return commands_.begin();
+    }
+
+    std::vector<DMACSyncPtr>::iterator initializer_end()
+    {
+        return commands_.end();
+    }
     
-    bool hasAHRS;
-    std::string node_name;
+    void load(void)
+    {
+      ros::param::param<bool>(node_name_ + "/modem_config/hasAHRS", hasAHRS_, false);
+      ROS_INFO_STREAM("hasAHRS: " << hasAHRS_);
+      
+      std::map<std::string,std::string> ini;
+      ros::param::get(node_name_ + "/modem_config/initialiser", ini);
+      std::map<std::string,std::string>::iterator mit;
+
+      /* default: @ZX1, @ZU1, !C1? */
+      pushSync("@CTRL");
+
+      int source_level, local_address;
+      ros::param::param<int>(node_name_ + "/modem_config/source_level", source_level, 3);
+      pushSync("!L",boost::lexical_cast<std::string>(source_level));
+
+      if (ros::param::has(node_name_ + "/modem_config/local_address")) {
+          ros::param::param<int>(node_name_ + "/modem_config/local_address", local_address, 0/**/);
+          pushSync("!AL",boost::lexical_cast<std::string>(local_address));
+      }
+      
+      /* add ctrl, local address */
+      for (mit = ini.begin(); mit != ini.end(); ++mit) {
+          pushSync(mit->first,mit->second);
+      }
+    }
+
+  private:
+    bool hasAHRS_;
+    std::string node_name_;
+    std::vector<DMACSyncPtr> commands_;
+
+    void pushSync(std::string command, std::string parameters = "")
+    {
+        DMACSyncPtr sync(new DMACSync);
+        sync->command = command;
+        sync->parameters = parameters;
+        commands_.push_back(sync);
+    }
 };
 
 }  // namespace
