@@ -104,6 +104,7 @@ public:
   {
     if (!error)
     {
+        parser_.connected();
         boost::asio::async_read(socket_,
           boost::asio::buffer(&mem_[0], capacity_),
           boost::asio::transfer_at_least(1),
@@ -113,7 +114,8 @@ public:
     }
     else
     {
-      do_close();
+        parser_.disconnected();
+        do_close();
     }
   }
 

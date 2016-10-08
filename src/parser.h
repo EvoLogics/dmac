@@ -48,6 +48,8 @@
 
 #include "comm_middlemen.h"
 #include "config.h"
+#include "initializer.h"
+#include "aparser.h"
 
 using boost::asio::ip::tcp;
 using dmac::DMACPayload;
@@ -59,15 +61,7 @@ using dmac::mUSBLFix;
 namespace dmac
 {
 
-typedef enum { DMAC_UNDEF = 0, DMAC_READY = 1 } dmac_filter_state;
-typedef enum { DMAC_UNKNOWN = 0, DMAC_AT = 1, DMAC_NET = 2 } dmac_filter_type;
-typedef enum { DMAC_DATA_MODE = 0, DMAC_COMMAND_MODE = 1 } dmac_filter_mode;
-typedef enum { WAITSYNC_NO = 0,
-               WAITSYNC_SINGLELINE = 1,
-               WAITSYNC_MULTILINE = 2,
-               WAITSYNC_BINARY = 3} dmac_waitsync_status;
-
-class parser
+class parser : public dmac::abstract_parser
 {
   public:
   parser(boost::asio::io_service& io_service, dmac::config &config, dmac::comm_middlemen *comm)
@@ -82,7 +76,8 @@ class parser
         request_parameters_(""),
         eol_("\n"),
         ext_networking_(false),
-        pid_(0)
+        pid_(0),
+        ini_(this)
     {
         pub_recv_ = nh_.advertise<DMACPayload>(config.node_name + "/recv", 100);
         pub_async_ = nh_.advertise<DMACAsync>(config.node_name + "/async", 100);
@@ -94,6 +89,39 @@ class parser
         comm_ = comm;
     }
 
+    void ctrl(parser_state_ctrl ctrl, int value)
+    {
+        switch (ctrl) {
+        case WAITSYNC: {
+            waitsync_ = (dmac_waitsync_status)value;
+            break;
+        }
+        case MODE: {
+            mode_ = (dmac_filter_mode)value;
+            break;
+        }
+        case FILTER: {
+            filter_ = (dmac_filter_type)value;
+            break;
+        }
+        default:
+            ROS_ERROR_STREAM("Unsupported ctrl: " << ctrl);
+        }
+    }
+    
+    void connected(void)
+    {
+        ini_.connected();
+    }
+
+    void disconnected(void)
+    {
+        ctrl(WAITSYNC, WAITSYNC_NO);
+        ctrl(MODE, DMAC_DATA_MODE);
+        ctrl(FILTER, DMAC_AT);
+        ini_.disconnected();
+    }
+    
     void to_term(std::vector<uint8_t> chunk, std::size_t len)
     {
         std::string schunk;
@@ -101,7 +129,8 @@ class parser
         for (int cnt = 0; cnt < len; it++, cnt++) {
             schunk.insert(schunk.end(), *it);
         }
-        ROS_INFO_STREAM("Parsing new data: " << schunk);
+        ROS_INFO_STREAM("Parsing new data(" << mode_ << "): " << schunk);
+        ROS_INFO_STREAM("waitsync_ : " << waitsync_);
         ROS_INFO_STREAM("more_: " << more_);
         more_ += schunk;
         publishRaw(schunk);
@@ -222,6 +251,8 @@ class parser
   private:
     boost::asio::io_service& io_service_;
     dmac::comm_middlemen *comm_;
+    dmac::config config_;
+    dmac::initializer ini_;
     /* parser state */
     ros::NodeHandle nh_;
     dmac_filter_type filter_;
@@ -233,7 +264,6 @@ class parser
     std::string eol_;
     bool ext_networking_;
     int pid_;
-    dmac::config config_;
     std::string more_;
     boost::asio::deadline_timer answer_timer_;
 
@@ -260,19 +290,24 @@ class parser
         DMACRaw raw_msg;
         raw_msg.stamp = ros::Time::now();
         raw_msg.command = raw;
+
         pub_raw_.publish(raw_msg);
     }
     
     void publishSync(std::string report, dmac_waitsync_status waitsync)
     {
         waitsync_ = waitsync;
-
+        
         DMACSync sync_msg;
         sync_msg.header.stamp = ros::Time::now();
         sync_msg.command = request_;
         sync_msg.parameters = request_parameters_;
         sync_msg.report = report;
-        pub_sync_.publish(sync_msg);
+        if (ini_.state() == dmac::FINAL) {
+            pub_sync_.publish(sync_msg);
+        } else {
+            ini_.sync(sync_msg);
+        }
     }
 
     void publishUSBLFix(mUSBLFix &fix)
@@ -282,7 +317,11 @@ class parser
     
     void publishRecv(DMACPayload &rcv)
     {
-        pub_recv_.publish(rcv);
+        if (ini_.state() == dmac::FINAL) {
+            pub_recv_.publish(rcv);
+        } else {
+            ini_.raw(rcv);
+        }
     }
 
     void publishAsync(DMACAsync &async)
