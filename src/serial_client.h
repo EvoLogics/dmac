@@ -126,7 +126,6 @@ class serial_client : public dmac::comm_middlemen
       port_->set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
 
       parser_.connected();
-      ROS_INFO_STREAM("running read some");
       port_->async_read_some( 
           boost::asio::buffer(&mem_[0], capacity_),
           boost::bind(
@@ -163,7 +162,6 @@ class serial_client : public dmac::comm_middlemen
 
   void send(std::string &msg)
   {
-      ROS_INFO_STREAM("sending " << msg);
       port_->async_write_some(
           boost::asio::buffer(msg, msg.length()),
           boost::bind(&serial_client::handle_write, this,
