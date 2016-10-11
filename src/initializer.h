@@ -106,6 +106,7 @@ namespace dmac
         {
             parser_ = parser;
             config_ = config;
+            // block_others; /* while initializing */
         }
 
         conf_state state(void)
@@ -247,7 +248,6 @@ namespace dmac
             ROS_INFO_STREAM("Handling " << conf_event_str(event) << " in state " << conf_state_str(state_));
             switch (event) {
             case INTERNAL: {
-                // later... evar(SM, yars, [{at,"@ZF","1"},{at, "@ZX","1"},{at,"@ZU","1"}]),
                 DMACSyncPtr sync(new DMACSync);
                 sync->header.stamp = ros::Time::now();
                 sync->command = "?MODE";

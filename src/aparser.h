@@ -46,7 +46,8 @@ typedef enum { WAITSYNC_NO = 0,
 
 typedef enum { WAITSYNC = 0,
                MODE = 1,
-               FILTER = 2} parser_state_ctrl;
+               FILTER = 2,
+               EOL = 3} parser_state_ctrl;
 
 class abstract_parser
 {

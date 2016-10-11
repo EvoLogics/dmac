@@ -37,6 +37,7 @@
 
 #include "comm_middlemen.h"
 #include "tcp_client.h"
+#include "serial_client.h"
 #include "config.h"
 
 namespace std {
@@ -63,25 +64,22 @@ int main(int argc, char* argv[])
   dmac::tcp_client *s = NULL;
   
   if (type == "TCP/IP") {
-
-    // initialiser: ["@ZX1", "@ZU1", "!C2"]
-      
       ros::param::param<std::string>(ros::this_node::getName() + "/modem_config/tcp_config/ip", IP, "192.168.6.2");
       ros::param::param<int>(ros::this_node::getName() + "/modem_config/tcp_config/port", port, 9200);
       
       ROS_INFO_STREAM("Connecting to IP: " << IP << ", port: " << port);
 
-      // config.node_name = ros::this_node::getName();
-      
       // Listen for TCP connections in background thread.
       tcp::resolver resolver(io_service);
       tcp::resolver::query query(IP, std::to_string(port));
       tcp::resolver::iterator iterator = resolver.resolve(query);
 
       dmac::tcp_client *s = new dmac::tcp_client(io_service, iterator, config);
+  } else if (type == "SERIAL") {
+      ROS_INFO_STREAM("Connecting to serial modem");
+      dmac::serial_client *s = new dmac::serial_client(io_service, config);
   } else {
       ROS_ERROR_STREAM("Unsupported connection type: " << type);
-      /* TODO: add serial support */
       return -1;
   }
   

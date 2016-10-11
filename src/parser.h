@@ -89,6 +89,17 @@ class parser : public dmac::abstract_parser
         comm_ = comm;
     }
 
+    void ctrl(parser_state_ctrl ctrl, std::string value)
+    {
+        switch (ctrl) {
+        case EOL:
+            eol_ = value;
+            break;
+        default:
+            ROS_ERROR_STREAM("Unsupported ctrl: " << ctrl);
+        }
+    }
+    
     void ctrl(parser_state_ctrl ctrl, int value)
     {
         switch (ctrl) {
