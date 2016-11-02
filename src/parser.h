@@ -997,16 +997,12 @@ class parser : public dmac::abstract_parser
     void rcv_extract(std::string recv, int pid, int len, std::string tail)
     {
         if (recv == "RECV,") {
-            /* todo: update more_ */
             recv_extract(pid, len, tail);
         } else if (recv == "RECVIM,") {
-            /* todo: update more_ */
             recvim_extract(pid, len, tail);
         } else if (recv == "RECVIMS,") {
-            /* todo: update more_ */
             recvims_extract(pid, len, tail);
         } else if (recv == "RECVPBM,") {
-            /* todo: update more_ */
             recvpbm_extract(pid, len, tail);
         } else {
             ROS_ERROR_STREAM("Unsupported recv: " << recv);
