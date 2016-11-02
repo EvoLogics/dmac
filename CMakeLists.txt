@@ -53,6 +53,7 @@ add_message_files(
    DMACRaw.msg
    DMACAsync.msg
    DMACSync.msg
+   DMACClock.msg
    mUSBLFix.msg
 )
 

@@ -43,6 +43,7 @@
 #include "dmac/DMACRaw.h"
 #include "dmac/DMACAsync.h"
 #include "dmac/DMACSync.h"
+#include "dmac/DMACClock.h"
 #include "dmac/mUSBLFix.h"
 #include "diagnostic_msgs/KeyValue.h"
 
@@ -56,6 +57,7 @@ using dmac::DMACPayload;
 using dmac::DMACRaw;
 using dmac::DMACAsync;
 using dmac::DMACSync;
+using dmac::DMACClock;
 using dmac::mUSBLFix;
 
 namespace dmac
@@ -81,6 +83,7 @@ class parser : public dmac::abstract_parser
     {
         pub_recv_ = nh_.advertise<DMACPayload>(config.nodeName() + "/recv", 100);
         pub_async_ = nh_.advertise<DMACAsync>(config.nodeName() + "/async", 100);
+        pub_clock_ = nh_.advertise<DMACClock>(config.nodeName() + "/clock", 100);
         pub_raw_ = nh_.advertise<DMACRaw>(config.nodeName() + "/raw", 100);
         pub_usblfix_ = nh_.advertise<mUSBLFix>(config.nodeName() + "/measurement/usbl_fix", 100);
         pub_sync_ = nh_.advertise<DMACSync>(config.nodeName() + "/sync", 100);
@@ -281,6 +284,7 @@ class parser : public dmac::abstract_parser
     ros::Publisher pub_recv_;
     ros::Publisher pub_raw_;
     ros::Publisher pub_async_;
+    ros::Publisher pub_clock_;
     ros::Publisher pub_usblfix_;
     ros::Publisher pub_sync_;
     ros::Subscriber sub_sync_;
@@ -339,6 +343,11 @@ class parser : public dmac::abstract_parser
     void publishAsync(DMACAsync &async)
     {
         pub_async_.publish(async);
+    }
+
+    void publishClock(DMACClock &clk)
+    {
+        pub_clock_.publish(clk);
     }
     
     void to_term_at()
@@ -437,7 +446,7 @@ class parser : public dmac::abstract_parser
             {
                 static const boost::regex async_regex(
                     "^(RECVSTART|RECVEND,|RECVFAILED,|SEND[^,]*,|BITRATE,|RADDR,|SRCLEVEL,|PHYON|PHYOFF|USBL[^,]*,"
-                    "|DELIVERED|FAILED|EXPIRED|CANCELED)(.*?)\r\n(.*)");
+                    "|DELIVERED|FAILED|EXPIRED|CANCELED|ECLK,)(.*?)\r\n(.*)");
                 boost::smatch async_matches;
                 /* 1 - asyn keyword, 2 - async parameters, 3 - rest */
                 if (boost::regex_match(more_, async_matches, async_regex)) {
@@ -528,6 +537,8 @@ class parser : public dmac::abstract_parser
             expired(parameters);
         } else if (async == "SRCLEVEL,") {
             srclevel(parameters);
+        } else if (async == "ECLK,") {
+            eclk(parameters);
         } else {
             ROS_WARN_STREAM("unsupported async: " << async);
         }
@@ -942,7 +953,7 @@ class parser : public dmac::abstract_parser
         }
         else
         {
-            ROS_ERROR_STREAM("" << __func__ << ": expected parameter count " << l.size() << " is not equal to 1.");
+            ROS_ERROR_STREAM("" << __func__ << ": expected parameter count " << l.size() << " is not equal to 2.");
         }
     }
     
@@ -956,6 +967,31 @@ class parser : public dmac::abstract_parser
         kv.value = parameters;
         async_msg.map.push_back(kv);
         publishAsync(async_msg);
+    }
+    
+    void eclk(std::string parameters)
+    {
+        static const boost::regex clk_regex("^([^.]*)\\.([^,]*),([^,]*),([^,]*),([^,]*),([^.]*)\\.([^,]*)");
+        boost::smatch clk_matches;
+
+       if (boost::regex_match(parameters, clk_matches, clk_regex))
+       { /* format matched */
+           DMACClock clock_msg;
+           clock_msg.stamp = ros::Time::now();
+           clock_msg.mono.sec = boost::lexical_cast<unsigned int>(clk_matches[1]);
+           clock_msg.mono.nsec = 1000 * boost::lexical_cast<unsigned int>(clk_matches[2]);
+           clock_msg.phy_clock = boost::lexical_cast<unsigned int>(clk_matches[3]);
+           clock_msg.phy_steer = boost::lexical_cast<unsigned int>(clk_matches[4]);
+           clock_msg.status = boost::lexical_cast<unsigned int>(clk_matches[5]);
+           clock_msg.gps_time.sec = boost::lexical_cast<unsigned int>(clk_matches[6]);
+           clock_msg.gps_time.nsec = 1000 * boost::lexical_cast<unsigned int>(clk_matches[7]);
+           publishClock(clock_msg);
+       } 
+       else
+       {
+           ROS_WARN_STREAM("ECLK parse error: " << parameters);
+           more_.erase(0, more_.find("\r\n") + 2);
+       }
     }
     
     void rcv_extract(std::string recv, int pid, int len, std::string tail)
