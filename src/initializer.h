@@ -109,6 +109,11 @@ namespace dmac
             // block_others; /* while initializing */
         }
 
+        bool ready(void)
+        {
+            return state_ == FINAL;
+        }
+        
         conf_state state(void)
         {
             return state_;
@@ -116,12 +121,14 @@ namespace dmac
 
         void connected(void)
         {
+            ROS_INFO_STREAM("ini: connected");
             initializer_it = config_->initializer_begin();
             handle_event(INTERNAL);
         }
 
         void disconnected(void)
         {
+            ROS_INFO_STREAM("ini: disconnected");
             state_ = IDLE;
         }
 
@@ -139,7 +146,11 @@ namespace dmac
                 ;
             } else {
                 if (sync_msg.report.compare(0,5,"ERROR") == 0) {
-                    handle_event<DMACSync>(ERROR, &sync_msg);
+                    if (sync_msg.report == "ERROR NOT INITIALIZED") { // ignore it
+                        ;
+                    } else {
+                        handle_event<DMACSync>(ERROR, &sync_msg);
+                    }
                 } else {
                     handle_event<DMACSync>(RCV, &sync_msg);
                 }
@@ -183,7 +194,7 @@ namespace dmac
             case IDLE:
                 switch (event) {
                 case INTERNAL: next_state = IDLE; break;
-                case RCV:      next_state = HANDLE_YAR; break;
+                case RCV:      next_state = HANDLE_MODE; break;
                 case ERROR:    next_state = REQUEST_MODE; break;
                 }
                 break;
@@ -251,7 +262,7 @@ namespace dmac
                 DMACSyncPtr sync(new DMACSync);
                 sync->header.stamp = ros::Time::now();
                 sync->command = "?MODE";
-                parser_->syncCallback(sync);
+                parser_->syncCallback(sync, true);
                 break;
             }
             case WRONG_RCV: {
@@ -284,7 +295,8 @@ namespace dmac
                 sync->header.stamp = ros::Time::now();
                 sync->command = "?MODE";
                 sync->parameters = "";
-                parser_->syncCallback(sync);
+                parser_->ctrl(dmac::WAITSYNC, dmac::WAITSYNC_NO);
+                parser_->syncCallback(sync, true);
                 break;
             }
             default:
@@ -307,7 +319,7 @@ namespace dmac
                         sync->header.stamp = ros::Time::now();
                         sync->command = "O";
                         sync->parameters = "";
-                        parser_->syncCallback(sync);
+                        parser_->syncCallback(sync, true);
                         parser_->ctrl(dmac::MODE, dmac::DMAC_DATA_MODE);
                         next_event = YAR;
                     } else if (sync->command.compare("?MODE") == 0 && sync->report.compare(0,3,"NET") == 0) {
@@ -337,7 +349,7 @@ namespace dmac
                 if (initializer_it == config_->initializer_end()) {
                     next_event = DONE;
                 } else {
-                    parser_->syncCallback(*initializer_it);
+                    parser_->syncCallback(*initializer_it, true);
                     initializer_it++;
                 }
                 break;

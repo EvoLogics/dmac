@@ -53,6 +53,7 @@ class abstract_parser
 {
   public:
     virtual void ctrl(parser_state_ctrl ctrl, int value) = 0;
+    virtual void syncCallback(const dmac::DMACSync::ConstPtr& msg, bool privilege) = 0;
     virtual void syncCallback(const dmac::DMACSync::ConstPtr& msg) = 0;
 };
 

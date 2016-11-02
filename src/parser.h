@@ -163,6 +163,11 @@ class parser : public dmac::abstract_parser
     
     void sendCallback(const dmac::DMACPayload::ConstPtr& msg)
     {
+        if (!ini_.ready()) {
+            ROS_ERROR_STREAM("Driver not yet initialized");
+            publishSync("ERROR NOT INITIALIZED", waitsync_);
+            return;
+        }
         if (waitsync_ == WAITSYNC_NO) {
             request_parameters_ = "";
             waitsync_ = WAITSYNC_SINGLELINE;
@@ -217,9 +222,9 @@ class parser : public dmac::abstract_parser
             ROS_ERROR_STREAM("" << __func__ << ": sequence error");
         }
     }
-    
-    void syncCallback(const dmac::DMACSync::ConstPtr& msg)
-    {
+
+    void syncCallback(const dmac::DMACSync::ConstPtr& msg, bool privilege)
+    { /* privilege true for initialiser */
         if (!msg->report.empty()) {
             /* ignore published by oursleves modem response */
             return;
@@ -246,7 +251,7 @@ class parser : public dmac::abstract_parser
                 std::string prefix = ((filter_ == DMAC_AT && mode_ == DMAC_DATA_MODE) ? "+++" : "");
                 request_parameters_ = msg->parameters;
                 std::string telegram = prefix + "AT" + request_ + msg->parameters + eol_;
-                sendSync(telegram);
+                sendSync(telegram, privilege);
             }
         } else {
             ROS_ERROR_STREAM("" << __func__ << ": sequence error");
@@ -254,6 +259,11 @@ class parser : public dmac::abstract_parser
         }
     }
 
+    void syncCallback(const dmac::DMACSync::ConstPtr& msg)
+    {
+        syncCallback(msg, false);
+    }
+    
     void handle_answer_timeout(const boost::system::error_code& error) {
         if (error == boost::asio::error::operation_aborted) {
             return;
@@ -290,15 +300,25 @@ class parser : public dmac::abstract_parser
     ros::Subscriber sub_sync_;
     ros::Subscriber sub_send_;
 
+    void sendSync(std::string &message, bool privilege)
+    {
+        if (privilege || ini_.ready()) {
+            comm_->send(message);
+            publishRaw(message);
+            
+            answer_timer_.cancel();
+            answer_timer_.expires_from_now(boost::posix_time::milliseconds(1000));
+            answer_timer_.async_wait(boost::bind(&parser::handle_answer_timeout, this,
+                                                 boost::asio::placeholders::error));
+        } else {
+            ROS_ERROR_STREAM("Driver not yet initialized");
+            publishSync("ERROR NOT INITIALIZED", waitsync_);
+        }
+    }
+    
     void sendSync(std::string &message)
     {
-        comm_->send(message);
-        publishRaw(message);
-        
-        answer_timer_.cancel();
-        answer_timer_.expires_from_now(boost::posix_time::milliseconds(1000));
-        answer_timer_.async_wait(boost::bind(&parser::handle_answer_timeout, this,
-                                             boost::asio::placeholders::error));
+        sendSync(message, false);
     }
 
     void publishRaw(std::string raw)
@@ -323,6 +343,9 @@ class parser : public dmac::abstract_parser
             pub_sync_.publish(sync_msg);
         } else {
             ini_.sync(sync_msg);
+            if (sync_msg.report == "ERROR NOT INITIALIZED") {
+                pub_sync_.publish(sync_msg);
+            }
         }
     }
 
@@ -983,8 +1006,8 @@ class parser : public dmac::abstract_parser
            clock_msg.phy_clock = boost::lexical_cast<unsigned int>(clk_matches[3]);
            clock_msg.phy_steer = boost::lexical_cast<unsigned int>(clk_matches[4]);
            clock_msg.status = boost::lexical_cast<unsigned int>(clk_matches[5]);
-           clock_msg.gps_time.sec = boost::lexical_cast<unsigned int>(clk_matches[6]);
-           clock_msg.gps_time.nsec = 1000 * boost::lexical_cast<unsigned int>(clk_matches[7]);
+           clock_msg.utc_time.sec = boost::lexical_cast<unsigned int>(clk_matches[6]);
+           clock_msg.utc_time.nsec = 1000 * boost::lexical_cast<unsigned int>(clk_matches[7]);
            publishClock(clock_msg);
        } 
        else

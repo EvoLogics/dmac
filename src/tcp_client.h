@@ -44,6 +44,8 @@ using boost::asio::ip::tcp;
 namespace dmac
 {
 
+typedef enum { DISCONNECTED = 0, WAITING = 1, CONNECTED = 2 } connection_state;
+
 class tcp_client : public dmac::comm_middlemen
 {
 public:
@@ -53,6 +55,7 @@ public:
         socket_(io_service),
         reconnect_timer_(io_service),
         endpoint_iterator_(endpoint_iterator),
+        state_(DISCONNECTED),
         parser_(io_service, config, this)
   {
     mem_.resize(capacity_);
@@ -67,44 +70,56 @@ public:
   
   void connect()
   {
-    boost::asio::async_connect(socket_, endpoint_iterator_,
-        boost::bind(&tcp_client::handle_connect, this,
-          boost::asio::placeholders::error));
+      state_ = WAITING;
+      boost::asio::async_connect(socket_, endpoint_iterator_,
+                                 boost::bind(&tcp_client::handle_connect, this,
+                                             boost::asio::placeholders::error));
   }
   
   void do_close()
   {
-    ROS_WARN_STREAM("connection closed...");
-    socket_.close();
-    /* FIXME: what to do if data arrives when socket is closed? */
-    reconnect_timer_.cancel();
-    reconnect_timer_.expires_from_now(boost::posix_time::milliseconds(1000));
-    reconnect_timer_.async_wait(boost::bind(&tcp_client::reconnect_timeout, this,
-          boost::asio::placeholders::error));
+      /* FIXME: what to do if data arrives when socket is closed? */
+      if (state_ == DISCONNECTED) {
+          ROS_WARN_STREAM("already closed...");
+      } else {
+          ROS_WARN_STREAM("connection closed...");
+          socket_.close();
+          parser_.disconnected();
+          reconnect_timer_.cancel();
+          reconnect_timer_.expires_from_now(boost::posix_time::milliseconds(1000));
+          reconnect_timer_.async_wait(boost::bind(&tcp_client::reconnect_timeout, this,
+                                                  boost::asio::placeholders::error));
+      }
+      state_ = DISCONNECTED;
   }
 
   void send(std::string &msg) 
   {
-    ROS_INFO_STREAM("sending " << msg);
-    boost::asio::async_write(socket_,
-      boost::asio::buffer(msg, msg.length()),
-      boost::bind(&tcp_client::handle_write, this,
-        boost::asio::placeholders::error,
-        boost::asio::placeholders::bytes_transferred));
+      if (state_ == CONNECTED) {
+          ROS_INFO_STREAM("sending " << msg);
+          boost::asio::async_write(socket_,
+                                   boost::asio::buffer(msg, msg.length()),
+                                   boost::bind(&tcp_client::handle_write, this,
+                                               boost::asio::placeholders::error,
+                                               boost::asio::placeholders::bytes_transferred));
+      } else {
+          ROS_WARN_STREAM("cannot send, not connected");
+      }
   }
   
   void reconnect_timeout(const boost::system::error_code& error) {
-    if (error == boost::asio::error::operation_aborted) {
-      return;
-    }
-    ROS_INFO_STREAM("reconnecting");
-    connect();
+      if (error == boost::asio::error::operation_aborted) {
+          return;
+      }
+      ROS_INFO_STREAM("reconnecting");
+      connect();
   }
   
   void handle_connect(const boost::system::error_code& error)
   {
     if (!error)
     {
+        state_ = CONNECTED;
         parser_.connected();
         boost::asio::async_read(socket_,
           boost::asio::buffer(&mem_[0], capacity_),
@@ -115,7 +130,7 @@ public:
     }
     else
     {
-        parser_.disconnected();
+        ROS_WARN_STREAM("do_close by " << __func__);
         do_close();
     }
   }
@@ -124,7 +139,8 @@ public:
   {
     if (error)
     {
-      do_close();
+        ROS_WARN_STREAM("do_close by " << __func__);
+        do_close();
     }
   }
 
@@ -143,11 +159,13 @@ public:
     }
     else
     {
-      do_close();
+        ROS_WARN_STREAM("do_close by " << __func__);
+        do_close();
     }
   }
   
 private:
+  connection_state state_;
   boost::asio::io_service& io_service_;
   boost::asio::deadline_timer reconnect_timer_;
   tcp::resolver::iterator endpoint_iterator_;
