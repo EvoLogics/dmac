@@ -469,7 +469,7 @@ class parser : public dmac::abstract_parser
             {
                 static const boost::regex async_regex(
                     "^(RECVSTART|RECVEND,|RECVFAILED,|SEND[^,]*,|BITRATE,|RADDR,|SRCLEVEL,|PHYON|PHYOFF|USBL[^,]*,"
-                    "|DELIVERED|FAILED|EXPIRED|CANCELED|ECLK,)(.*?)\r\n(.*)");
+                    "|DROPCNT|DELIVERED|FAILED|EXPIRED|CANCELED|ECLK,)(.*?)\r\n(.*)");
                 boost::smatch async_matches;
                 /* 1 - asyn keyword, 2 - async parameters, 3 - rest */
                 if (boost::regex_match(more_, async_matches, async_regex)) {
@@ -562,6 +562,8 @@ class parser : public dmac::abstract_parser
             srclevel(parameters);
         } else if (async == "ECLK,") {
             eclk(parameters);
+        } else if (async == "DROPCNT,") {
+            dropcnt(parameters);
         } else {
             ROS_WARN_STREAM("unsupported async: " << async);
         }
@@ -986,6 +988,18 @@ class parser : public dmac::abstract_parser
         DMACAsync async_msg;
         async_msg.header.stamp = ros::Time::now();
         async_msg.async = "srclevel";
+        kv.key = "value";
+        kv.value = parameters;
+        async_msg.map.push_back(kv);
+        publishAsync(async_msg);
+    }
+
+    void dropcnt(std::string parameters)
+    {
+        diagnostic_msgs::KeyValue kv;
+        DMACAsync async_msg;
+        async_msg.header.stamp = ros::Time::now();
+        async_msg.async = "dropcnt";
         kv.key = "value";
         kv.value = parameters;
         async_msg.map.push_back(kv);
