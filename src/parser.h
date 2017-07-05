@@ -1143,7 +1143,7 @@ class parser : public dmac::abstract_parser
            if (len + 2 <= recvim_matches[8].str().length())
            {
                /* todo: add names parameter */
-               recvim_msg.header.stamp = ros::Time::now();
+               recvim_msg.header.stamp = ros::Time::now()-ros::Duration(boost::lexical_cast<uint32_t>(recvim_matches[4])/1000000.0);
                recvim_msg.type = DMACPayload::DMAC_IM;
                recvim_msg.source_address = boost::lexical_cast<int>(recvim_matches[1]);
                recvim_msg.destination_address = boost::lexical_cast<int>(recvim_matches[2]);
@@ -1215,7 +1215,7 @@ class parser : public dmac::abstract_parser
         { /* format matched, check length */
             if (len + 2 <= recvims_matches[8].str().length())
             {
-                recvims_msg.header.stamp = ros::Time::now();
+                recvims_msg.header.stamp = ros::Time::now()-ros::Duration(boost::lexical_cast<uint32_t>(recvims_matches[4])/1000000.0);
                 recvims_msg.type = DMACPayload::DMAC_IMS;
                 recvims_msg.source_address = boost::lexical_cast<int>(recvims_matches[1]);
                 recvims_msg.destination_address = boost::lexical_cast<int>(recvims_matches[2]);
@@ -1266,7 +1266,7 @@ class parser : public dmac::abstract_parser
         { /* format matched, check length */
             if (len + 2 <= recvpbm_matches[7].str().length())
             {
-                recvpbm_msg.header.stamp = ros::Time::now();
+                recvpbm_msg.header.stamp = ros::Time::now()-ros::Duration(boost::lexical_cast<uint32_t>(recvpbm_matches[3])/1000000.0);
                 recvpbm_msg.type = DMACPayload::DMAC_PBM;
                 recvpbm_msg.source_address = boost::lexical_cast<int>(recvpbm_matches[1]);
                 recvpbm_msg.destination_address = boost::lexical_cast<int>(recvpbm_matches[2]);
