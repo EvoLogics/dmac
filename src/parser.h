@@ -714,17 +714,17 @@ class parser : public dmac::abstract_parser
             double x = boost::lexical_cast<double>(*it++);
             double y = boost::lexical_cast<double>(*it++);
             double z = boost::lexical_cast<double>(*it++);
-            
-            fix_msg.bearing_raw = atan2(y,x) * 180 / M_PI;
-            fix_msg.elevation_raw = atan2(z, sqrt(x*x + y*y)) * 180 / M_PI;
+
+            fix_msg.bearing_raw = atan2(y,x);
+            fix_msg.elevation_raw = atan2(z, sqrt(x*x + y*y));
 
             x = fix_msg.relative_position.x = boost::lexical_cast<double>(*it++);
             y = fix_msg.relative_position.y = boost::lexical_cast<double>(*it++);
             z = fix_msg.relative_position.z = boost::lexical_cast<double>(*it++);
 
-            fix_msg.bearing = atan2(y,x) * 180 / M_PI;
-            fix_msg.elevation = atan2(z, sqrt(x*x + y*y)) * 180 / M_PI;
-            
+            fix_msg.bearing = atan2(y,x);
+            fix_msg.elevation = atan2(z, sqrt(x*x + y*y));
+
             it++; it++; it++;
 
             fix_msg.sound_speed = 1500;
@@ -763,6 +763,15 @@ class parser : public dmac::abstract_parser
             double bearing = boost::lexical_cast<double>(*it++);
             double elevation = boost::lexical_cast<double>(*it++);
 
+            *it++;
+            *it++;
+            *it++;
+            *it++;
+            *it++;
+
+            double accuracy =  boost::lexical_cast<double>(*it);
+            //ROS_ERROR_STREAM("" << __func__ << ": accuracy = " << accuracy);
+
             fix_msg.bearing_raw = lbearing;
             fix_msg.elevation_raw = lelevation;
             
@@ -774,7 +783,9 @@ class parser : public dmac::abstract_parser
                 fix_msg.elevation = 0;
             }
             fix_msg.sound_speed = 1500;
-            publishUSBLFix(fix_msg);
+
+            if (accuracy >= 0)
+                publishUSBLFix(fix_msg);
         }
         else
         {
@@ -1132,7 +1143,7 @@ class parser : public dmac::abstract_parser
            if (len + 2 <= recvim_matches[8].str().length())
            {
                /* todo: add names parameter */
-               recvim_msg.header.stamp = ros::Time::now();
+               recvim_msg.header.stamp = ros::Time::now()-ros::Duration(boost::lexical_cast<uint32_t>(recvim_matches[4])/1000000.0);
                recvim_msg.type = DMACPayload::DMAC_IM;
                recvim_msg.source_address = boost::lexical_cast<int>(recvim_matches[1]);
                recvim_msg.destination_address = boost::lexical_cast<int>(recvim_matches[2]);
@@ -1204,7 +1215,7 @@ class parser : public dmac::abstract_parser
         { /* format matched, check length */
             if (len + 2 <= recvims_matches[8].str().length())
             {
-                recvims_msg.header.stamp = ros::Time::now();
+                recvims_msg.header.stamp = ros::Time::now()-ros::Duration(boost::lexical_cast<uint32_t>(recvims_matches[4])/1000000.0);
                 recvims_msg.type = DMACPayload::DMAC_IMS;
                 recvims_msg.source_address = boost::lexical_cast<int>(recvims_matches[1]);
                 recvims_msg.destination_address = boost::lexical_cast<int>(recvims_matches[2]);
@@ -1255,7 +1266,7 @@ class parser : public dmac::abstract_parser
         { /* format matched, check length */
             if (len + 2 <= recvpbm_matches[7].str().length())
             {
-                recvpbm_msg.header.stamp = ros::Time::now();
+                recvpbm_msg.header.stamp = ros::Time::now()-ros::Duration(boost::lexical_cast<uint32_t>(recvpbm_matches[3])/1000000.0);
                 recvpbm_msg.type = DMACPayload::DMAC_PBM;
                 recvpbm_msg.source_address = boost::lexical_cast<int>(recvpbm_matches[1]);
                 recvpbm_msg.destination_address = boost::lexical_cast<int>(recvpbm_matches[2]);
