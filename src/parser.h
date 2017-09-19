@@ -165,7 +165,7 @@ class parser : public dmac::abstract_parser
     {
         if (!ini_.ready()) {
             ROS_ERROR_STREAM("Driver not yet initialized");
-            publishSync("ERROR NOT INITIALIZED", waitsync_);
+            publishSync("ERROR NOT INITIALIZED", WAITSYNC_NO);
             return;
         }
         if (waitsync_ == WAITSYNC_NO) {
@@ -312,7 +312,7 @@ class parser : public dmac::abstract_parser
                                                  boost::asio::placeholders::error));
         } else {
             ROS_ERROR_STREAM("Driver not yet initialized");
-            publishSync("ERROR NOT INITIALIZED", waitsync_);
+            publishSync("ERROR NOT INITIALIZED", WAITSYNC_NO);
         }
     }
     

@@ -326,6 +326,7 @@ namespace dmac
                         parser_->ctrl(dmac::FILTER, dmac::DMAC_NET);
                         next_event = YAR;
                     } else {
+                        ROS_ERROR_STREAM("WRONG_RCV: " << sync->report);
                         next_event = WRONG_RCV;
                     }
                 } else {
@@ -360,6 +361,7 @@ namespace dmac
                         sync->report.compare(0,5,"[*]OK") == 0) {
                         next_event = YAR;
                     } else {
+                        ROS_ERROR_STREAM("WRONG_RCV: " << sync->report);
                         next_event = WRONG_RCV;
                     }
                 } else {
