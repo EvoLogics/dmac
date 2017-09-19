@@ -79,10 +79,6 @@ class config
       ros::param::param<bool>(node_name_ + "/modem_config/hasAHRS", hasAHRS_, false);
       ROS_INFO_STREAM("hasAHRS: " << hasAHRS_);
       
-      std::map<std::string,std::string> ini;
-      ros::param::get(node_name_ + "/modem_config/initialiser", ini);
-      std::map<std::string,std::string>::iterator mit;
-
       /* default: @ZX1, @ZU1, !C1? */
       pushSync("@CTRL");
 
@@ -92,8 +88,17 @@ class config
 
       if (ros::param::has(node_name_ + "/modem_config/local_address")) {
           ros::param::param<int>(node_name_ + "/modem_config/local_address", local_address, 0/**/);
+          
           pushSync("!AL",boost::lexical_cast<std::string>(local_address));
       }
+      
+      std::map<std::string,std::string> ini;
+      if (ros::param::has(node_name_ + "/modem_config/initialiser")) {
+          ros::param::get(node_name_ + "/modem_config/initialiser", ini);
+      } else {
+          ros::param::get(node_name_ + "/modem_config/initializer", ini);
+      }
+      std::map<std::string,std::string>::iterator mit;
       
       /* add ctrl, local address */
       for (mit = ini.begin(); mit != ini.end(); ++mit) {
