@@ -159,6 +159,11 @@ target_link_libraries(dmac
 # )
 
 ## Mark executables and/or libraries for installation
+
+install(TARGETS dmac dmac
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
+
 # install(TARGETS beginner_tutorials beginner_tutorials_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
